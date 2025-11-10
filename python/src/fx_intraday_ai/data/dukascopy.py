@@ -79,8 +79,8 @@ class DukascopyDownloader:
         end: pd.Timestamp,
         progress_cb: Optional[ProgressCallback],
     ) -> pd.DataFrame:
-        current = start.floor("H")
-        end_hour = end.ceil("H")
+        current = start.floor("h")
+        end_hour = end.ceil("h")
         total_hours = int(((end_hour - current) / _HOUR)) + 1
         hour_frames: List[pd.DataFrame] = []
         completed = 0
@@ -102,7 +102,7 @@ class DukascopyDownloader:
             .set_index("timestamp")
             .sort_index()
         )
-        freq = f"{self.timeframe_minutes}T"
+        freq = f"{self.timeframe_minutes}min"
         ohlc = raw["mid"].resample(freq, label="right", closed="right").ohlc()
         volume = raw["volume"].resample(freq, label="right", closed="right").sum()
         spread = raw["spread"].resample(freq, label="right", closed="right").mean()
