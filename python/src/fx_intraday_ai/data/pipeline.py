@@ -64,7 +64,10 @@ class DataPipeline:
             return None
         df = self._read_external_table(path)
         if "timestamp" not in df.columns:
-            raise ValueError(f"Macro file {path} missing 'timestamp' column.")
+            if df.index.name is not None:
+                df = df.reset_index().rename(columns={df.index.name: "timestamp"})
+            else:
+                raise ValueError(f"Macro file {path} missing 'timestamp' column.")
         macro = df.copy()
         macro["timestamp"] = pd.to_datetime(macro["timestamp"], utc=True)
         macro = macro.set_index("timestamp").sort_index()
