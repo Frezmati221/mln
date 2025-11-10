@@ -35,9 +35,14 @@ class FeatureConfig(BaseModel):
     regime_features: Dict[str, bool] = Field(default_factory=dict)
 
 
+class PairGrid(BaseModel):
+    default: List[float]
+    USDJPY: Optional[List[float]] = None
+
+
 class LabelConfig(BaseModel):
-    tp_grid_pips: List[float]
-    sl_grid_pips: List[float]
+    tp_grid_pips: Any
+    sl_grid_pips: Any
     transaction_cost_pips: float = 1.0
     reward_metric: str = "sharpe"
 
