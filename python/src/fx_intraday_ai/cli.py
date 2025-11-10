@@ -102,7 +102,8 @@ def train_command(
         console.print(f"Generated {len(artifacts.predictions):,} validation predictions.")
         pred_path = Path(predictions_path)
         pred_path.parent.mkdir(parents=True, exist_ok=True)
-        artifacts.predictions.reset_index().to_parquet(pred_path, index=False)
+        save_df = artifacts.predictions.reset_index()
+        save_df.to_parquet(pred_path, index=False)
         console.print(f"Predictions saved to {pred_path}")
     if artifacts.model_states:
         model_dir_path = Path(model_dir)
@@ -141,8 +142,7 @@ def backtest_command(config_path: str, refresh_cache: bool, predictions_path: st
 
     if not retrain and pred_path.exists():
         predictions = pd.read_parquet(pred_path)
-        if "timestamp" not in predictions.columns:
-            predictions = predictions.reset_index()
+        predictions = _ensure_timestamp_index(predictions)
         console.print(f"Loaded predictions from {pred_path}")
     else:
         manager = TrainingManager(cfg)
@@ -150,9 +150,9 @@ def backtest_command(config_path: str, refresh_cache: bool, predictions_path: st
         if artifacts.predictions is None or artifacts.predictions.empty:
             console.print("[red]No predictions available for backtest.[/red]")
             raise SystemExit(1)
-        predictions = artifacts.predictions.reset_index()
+        predictions = artifacts.predictions.copy()
         pred_path.parent.mkdir(parents=True, exist_ok=True)
-        predictions.to_parquet(pred_path, index=False)
+        predictions.reset_index().to_parquet(pred_path, index=False)
         console.print(f"Predictions saved to {pred_path}")
 
     pipeline = DataPipeline(cfg)
@@ -186,6 +186,16 @@ def backtest_command(config_path: str, refresh_cache: bool, predictions_path: st
             f"{metrics['max_drawdown']:.2f}",
         )
     console.print(table)
+
+
+def _ensure_timestamp_index(df: pd.DataFrame) -> pd.DataFrame:
+    if "timestamp" in df.columns:
+        df = df.copy()
+        df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+        df = df.set_index("timestamp")
+    elif df.index.name != "timestamp":
+        df.index = pd.to_datetime(df.index, utc=True)
+    return df
 
 
 @cli.command("download-data", help="Download historical FX data from Dukascopy.")
