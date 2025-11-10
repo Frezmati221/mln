@@ -193,7 +193,7 @@ class FeatureEngineer:
     def _inject_macro_features(self, feats: pd.DataFrame, macro_frame: Optional[pd.DataFrame]) -> None:
         if macro_frame is None or macro_frame.empty:
             return
-        aligned = macro_frame.reindex(feats.index, method="ffill").fillna(method="ffill")
+        aligned = macro_frame.reindex(feats.index).ffill()
         for col in aligned.columns:
             if col == "timestamp":
                 continue
@@ -224,7 +224,7 @@ class FeatureEngineer:
     def _inject_sentiment(self, feats: pd.DataFrame, sentiment_frame: Optional[pd.DataFrame]) -> None:
         if sentiment_frame is None or sentiment_frame.empty:
             return
-        aligned = sentiment_frame.reindex(feats.index, method="ffill").fillna(method="ffill")
+        aligned = sentiment_frame.reindex(feats.index).ffill()
         score = aligned["sentiment_score"]
         feats["sentiment_score"] = score
         feats["sentiment_change_12"] = score.diff(12)

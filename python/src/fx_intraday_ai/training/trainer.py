@@ -61,7 +61,7 @@ def _aggregate_ensemble_predictions(predictions: List[pd.DataFrame]) -> pd.DataF
     concat = pd.concat(predictions)
     concat = concat.drop(columns=["ensemble_member"], errors="ignore")
     concat = concat.copy()
-    concat["timestamp"] = concat.index
+    concat = concat.reset_index()
     grouped = concat.groupby(["timestamp", "pair"], sort=True)
     records: List[Dict[str, object]] = []
     for (timestamp, pair), group in grouped:
