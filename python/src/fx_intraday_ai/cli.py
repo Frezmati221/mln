@@ -14,7 +14,6 @@ from rich.progress import Progress, SpinnerColumn, BarColumn, TimeElapsedColumn,
 from .utils.config import load_config
 from .data.pipeline import DataPipeline
 from .data.loader import load_price_frames
-from .features.engineer import FeatureEngineer
 from .training.dataset import SequenceNormalizer
 from .training.trainer import TrainingManager, CLASS_TO_DIR
 from .backtest.simulator import Backtester
@@ -108,8 +107,8 @@ def train_command(
     if artifacts.model_states:
         model_dir_path = Path(model_dir)
         model_dir_path.mkdir(parents=True, exist_ok=True)
-        for split_id, state_dict in artifacts.model_states:
-            model_file = model_dir_path / f"split_{split_id}.pt"
+        for model_id, state_dict in artifacts.model_states:
+            model_file = model_dir_path / f"{model_id}.pt"
             torch.save(state_dict, model_file)
         console.print(f"Saved {len(artifacts.model_states)} checkpoint(s) to {model_dir_path}")
 
@@ -388,9 +387,9 @@ def status_command(config_path: str, predictions_path: str, model_dir: str) -> N
 @click.option("--refresh-cache", is_flag=True, help="Regenerate cached prices before inference.")
 def infer_command(config_path: str, model_path: Optional[str], seq_len: Optional[int], refresh_cache: bool) -> None:
     cfg = load_config(Path(config_path))
-    price_frames = load_price_frames(cfg, refresh_cache=refresh_cache)
-    feature_engineer = FeatureEngineer(cfg.features)
-    feature_frames = feature_engineer.transform(price_frames)
+    pipeline = DataPipeline(cfg)
+    price_frames = pipeline.load_prices(refresh_cache=refresh_cache)
+    feature_frames = pipeline.build_feature_frames(price_frames)
     frames = {pair: frame.data.dropna().copy() for pair, frame in feature_frames.items() if not frame.data.empty}
     if not frames:
         console.print("[red]No feature data available. Ensure price history exists.[/red]")

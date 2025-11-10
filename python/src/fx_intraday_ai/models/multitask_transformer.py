@@ -25,22 +25,32 @@ class PositionalEncoding(nn.Module):
 
 
 class MultiTaskTransformer(nn.Module):
-    def __init__(self, input_dim: int, cfg: ModelConfig, num_pairs: int):
+    def __init__(self, input_dim: int, cfg: ModelConfig, num_pairs: int, base_timeframe: int = 5):
         super().__init__()
         self.cfg = cfg
+        self.base_timeframe = base_timeframe
         self.token_proj = nn.Linear(input_dim, cfg.hidden_dim)
-        self.positional_encoding = PositionalEncoding(cfg.hidden_dim, cfg.max_seq_len)
         self.pair_embedding = nn.Embedding(num_pairs, cfg.hidden_dim)
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=cfg.hidden_dim,
-            nhead=cfg.num_heads,
-            dim_feedforward=cfg.hidden_dim * 4,
-            dropout=cfg.dropout,
-            batch_first=True,
-            activation="gelu",
-        )
-        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=cfg.num_layers)
-        self.norm = nn.LayerNorm(cfg.hidden_dim)
+
+        self.scales = cfg.multi_scale or [base_timeframe]
+        if base_timeframe not in self.scales:
+            self.scales.insert(0, base_timeframe)
+        self.positional_encodings = nn.ModuleDict()
+        self.encoders = nn.ModuleDict()
+        attn_dropout = cfg.attention_dropout if hasattr(cfg, "attention_dropout") else cfg.dropout
+        for scale in self.scales:
+            max_len = max(2, cfg.max_seq_len // max(1, scale // max(1, base_timeframe)))
+            self.positional_encodings[str(scale)] = PositionalEncoding(cfg.hidden_dim, max_len)
+            encoder_layer = nn.TransformerEncoderLayer(
+                d_model=cfg.hidden_dim,
+                nhead=cfg.num_heads,
+                dim_feedforward=cfg.hidden_dim * 4,
+                dropout=attn_dropout,
+                batch_first=True,
+                activation="gelu",
+            )
+            self.encoders[str(scale)] = nn.TransformerEncoder(encoder_layer, num_layers=cfg.num_layers)
+        self.norm = nn.LayerNorm(cfg.hidden_dim, eps=getattr(cfg, "layer_norm_eps", 1e-5))
 
         self.direction_head = nn.Sequential(
             nn.Linear(cfg.hidden_dim, cfg.hidden_dim // 2),
@@ -51,14 +61,19 @@ class MultiTaskTransformer(nn.Module):
         self.sl_head = nn.Linear(cfg.hidden_dim, 1)
         self.holding_head = nn.Linear(cfg.hidden_dim, 1)
         self.uncertainty_head = nn.Linear(cfg.hidden_dim, 1) if cfg.uncertainty_head else None
+        self.volatility_head = nn.Linear(cfg.hidden_dim, 2) if cfg.auxiliary_heads.get("volatility") else None
+        self.regime_head = nn.Linear(cfg.hidden_dim, 2) if cfg.auxiliary_heads.get("regime") else None
 
     def forward(self, x: torch.Tensor, pair_idx: torch.Tensor) -> Dict[str, torch.Tensor]:
         # x: [batch, seq_len, input_dim]
-        tokens = self.token_proj(x)
-        tokens = self.positional_encoding(tokens)
-        tokens = tokens + self.pair_embedding(pair_idx).unsqueeze(1)
-        encoded = self.encoder(tokens)
-        pooled = self.norm(encoded[:, -1])
+        pooled_outputs = []
+        for scale in self.scales:
+            tokens = self.token_proj(self._downsample(x, scale))
+            tokens = self.positional_encodings[str(scale)](tokens)
+            tokens = tokens + self.pair_embedding(pair_idx).unsqueeze(1)
+            encoded = self.encoders[str(scale)](tokens)
+            pooled_outputs.append(encoded[:, -1])
+        pooled = self.norm(torch.stack(pooled_outputs, dim=0).mean(dim=0))
 
         outputs = {
             "direction_logits": self.direction_head(pooled),
@@ -68,4 +83,18 @@ class MultiTaskTransformer(nn.Module):
         }
         if self.uncertainty_head is not None:
             outputs["uncertainty"] = F.softplus(self.uncertainty_head(pooled))
+        if self.volatility_head is not None:
+            outputs["volatility_logits"] = self.volatility_head(pooled)
+        if self.regime_head is not None:
+            outputs["regime_logits"] = self.regime_head(pooled)
         return outputs
+
+    def _downsample(self, x: torch.Tensor, scale: int) -> torch.Tensor:
+        if scale <= self.base_timeframe:
+            return x
+        factor = max(1, scale // max(1, self.base_timeframe))
+        if factor <= 1:
+            return x
+        x_perm = x.permute(0, 2, 1)
+        pooled = F.avg_pool1d(x_perm, kernel_size=factor, stride=factor)
+        return pooled.permute(0, 2, 1)

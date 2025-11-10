@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, Optional
 
 import numpy as np
 import pandas as pd
@@ -14,14 +14,32 @@ from ..utils.config import FeatureConfig
 class FeatureEngineer:
     cfg: FeatureConfig
 
-    def transform(self, price_frames: Dict[str, PriceFrame]) -> Dict[str, FeatureFrame]:
+    def transform(
+        self,
+        price_frames: Dict[str, PriceFrame],
+        macro_frame: Optional[pd.DataFrame] = None,
+        sentiment_frames: Optional[Dict[str, pd.DataFrame]] = None,
+        calendar_flags: Optional[pd.DataFrame] = None,
+    ) -> Dict[str, FeatureFrame]:
         feature_frames: Dict[str, FeatureFrame] = {}
         for pair, frame in price_frames.items():
-            data = self._build_features(frame.data.copy())
+            sentiment = sentiment_frames.get(pair) if sentiment_frames else None
+            data = self._build_features(
+                frame.data.copy(),
+                macro_frame=macro_frame,
+                sentiment_frame=sentiment,
+                calendar_flags=calendar_flags,
+            )
             feature_frames[pair] = FeatureFrame(pair=pair, data=data.dropna())
         return feature_frames
 
-    def _build_features(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _build_features(
+        self,
+        df: pd.DataFrame,
+        macro_frame: Optional[pd.DataFrame] = None,
+        sentiment_frame: Optional[pd.DataFrame] = None,
+        calendar_flags: Optional[pd.DataFrame] = None,
+    ) -> pd.DataFrame:
         feats = pd.DataFrame(index=df.index)
         open_prices = df["open"] if "open" in df else df["close"]
         close = df["close"]
@@ -166,4 +184,61 @@ class FeatureEngineer:
         feats["close_p10_48"] = close.rolling(48).quantile(0.1)
         feats["close_spread_p9010"] = feats["close_p90_48"] - feats["close_p10_48"]
 
+        self._inject_macro_features(feats, macro_frame)
+        self._inject_sentiment(feats, sentiment_frame)
+        self._inject_event_flags(feats, calendar_flags)
+
         return feats
+
+    def _inject_macro_features(self, feats: pd.DataFrame, macro_frame: Optional[pd.DataFrame]) -> None:
+        if macro_frame is None or macro_frame.empty:
+            return
+        aligned = macro_frame.reindex(feats.index, method="ffill").fillna(method="ffill")
+        for col in aligned.columns:
+            if col == "timestamp":
+                continue
+            base_name = f"macro_{col}"
+            feats[base_name] = aligned[col]
+            feats[f"{base_name}_ret_12"] = aligned[col].pct_change(12)
+
+        if self.cfg.regime_features.get("enable_vix_proxy"):
+            vix_col = next((col for col in aligned.columns if "vix" in col), None)
+            if vix_col:
+                vix_series = aligned[vix_col]
+                feats["vix_zscore_96"] = (vix_series - vix_series.rolling(96).mean()) / (
+                    vix_series.rolling(96).std() + 1e-9
+                )
+
+        dxy_col = next((col for col in aligned.columns if "dxy" in col), None)
+        if dxy_col:
+            dxy_ret = aligned[dxy_col].pct_change()
+            feats["dxy_ret_12"] = dxy_ret.rolling(12).mean()
+            feats["dxy_corr_96"] = feats["log_ret_1"].rolling(96).corr(dxy_ret)
+
+        gold_col = next((col for col in aligned.columns if "xau" in col or "gold" in col), None)
+        if gold_col:
+            gold_ret = aligned[gold_col].pct_change()
+            feats["gold_ret_12"] = gold_ret.rolling(12).mean()
+            feats["gold_corr_96"] = feats["log_ret_1"].rolling(96).corr(gold_ret)
+
+    def _inject_sentiment(self, feats: pd.DataFrame, sentiment_frame: Optional[pd.DataFrame]) -> None:
+        if sentiment_frame is None or sentiment_frame.empty:
+            return
+        aligned = sentiment_frame.reindex(feats.index, method="ffill").fillna(method="ffill")
+        score = aligned["sentiment_score"]
+        feats["sentiment_score"] = score
+        feats["sentiment_change_12"] = score.diff(12)
+        feats["sentiment_zscore_96"] = (score - score.rolling(96).mean()) / (score.rolling(96).std() + 1e-9)
+
+    def _inject_event_flags(self, feats: pd.DataFrame, calendar_flags: Optional[pd.DataFrame]) -> None:
+        if (
+            calendar_flags is None
+            or calendar_flags.empty
+            or not self.cfg.regime_features.get("enable_macro_event_flags", False)
+        ):
+            return
+        daily_index = feats.index.normalize()
+        aligned = calendar_flags.reindex(daily_index).fillna(0.0)
+        aligned.index = feats.index
+        for col in aligned.columns:
+            feats[f"event_{col}"] = aligned[col]

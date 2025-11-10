@@ -46,6 +46,7 @@ class IntradayLabeler:
         base_sl = self._pair_grid(self.cfg.labels.sl_grid_pips, pair)
         base_tp = np.array(base_tp, dtype=float)
         base_sl = np.array(base_sl, dtype=float)
+        min_ratio = getattr(self.cfg.labels, "min_tp_sl_ratio", 1.0)
 
         for idx in range(len(df)):
             entry_time = timestamps[idx]
@@ -98,6 +99,13 @@ class IntradayLabeler:
                 else:
                     direction = -1
                     tp_pips, sl_pips, hold_minutes, edge = short_tp, short_sl, short_hold, short_reward
+
+            if direction != 0 and (tp_pips / (sl_pips + 1e-9)) < min_ratio:
+                direction = 0
+                tp_pips = 0.0
+                sl_pips = 0.0
+                hold_minutes = 0.0
+                edge = 0.0
 
             rows.append(
                 {
