@@ -24,8 +24,12 @@ features:
     enable_vix_proxy: true
     enable_session_embeds: true
 labels:
-  tp_grid_pips: [5, 8, 13, 21, 34, 55]
-  sl_grid_pips: [5, 8, 13, 21, 34, 55]
+  tp_grid_pips:
+    default: [4, 6, 9, 14, 21, 34]
+    USDJPY: [3, 5, 8, 13, 21, 34]
+  sl_grid_pips:
+    default: [4, 6, 9, 14, 21, 34]
+    USDJPY: [3, 5, 8, 13, 21, 34]
   transaction_cost_pips: 1.2
   reward_metric: sharpe
 model:
@@ -55,8 +59,8 @@ training:
 backtest:
   slippage_pips: 0.2
   spread_pips:
-    EURUSD: 0.8
-    USDJPY: 0.9
-    GBPUSD: 1.2
+    EURUSD: 0.4
+    USDJPY: 4.0
+    GBPUSD: 0.9
   risk_per_trade: 0.005
   max_daily_drawdown: 0.02

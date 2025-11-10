@@ -39,10 +39,13 @@ class IntradayLabeler:
         highs = df["high"].to_numpy()
         lows = df["low"].to_numpy()
         closes = df["close"].to_numpy()
+        atr = df["atr_14"] if "atr_14" in df else (df["high"] - df["low"]).rolling(14).mean()
 
         rows = []
-        tp_grid = sorted(set(self.cfg.labels.tp_grid_pips))
-        sl_grid = sorted(set(self.cfg.labels.sl_grid_pips))
+        base_tp = self._pair_grid(self.cfg.labels.tp_grid_pips, pair)
+        base_sl = self._pair_grid(self.cfg.labels.sl_grid_pips, pair)
+        base_tp = np.array(base_tp, dtype=float)
+        base_sl = np.array(base_sl, dtype=float)
 
         for idx in range(len(df)):
             entry_time = timestamps[idx]
@@ -55,6 +58,9 @@ class IntradayLabeler:
             future_highs = highs[future_slice]
             future_lows = lows[future_slice]
             future_closes = closes[future_slice]
+            atr_value = atr.iloc[idx] if not pd.isna(atr.iloc[idx]) else np.nan
+            tp_grid = self._scaled_grid(base_tp, atr_value, pip, pair)
+            sl_grid = self._scaled_grid(base_sl, atr_value, pip, pair)
 
             long_reward, long_tp, long_sl, long_hold = self._evaluate_direction(
                 entry_price=closes[idx],
@@ -109,6 +115,23 @@ class IntradayLabeler:
 
         label_df = pd.DataFrame(rows).set_index("timestamp")
         return label_df
+
+    def _scaled_grid(self, base_grid: np.ndarray, atr_value: float, pip: float, pair: str) -> list[float]:
+        if np.isnan(atr_value) or atr_value <= 0:
+            return sorted(set(base_grid.tolist()))
+        atr_pips = atr_value / pip
+        scales = np.clip(atr_pips / 10.0, 0.5, 2.0)
+        scaled = base_grid * scales
+        return sorted(set(np.maximum(scaled, 1.0).tolist()))
+
+    def _pair_grid(self, grid_cfg, pair: str) -> list[float]:
+        if isinstance(grid_cfg, dict):
+            if pair in grid_cfg:
+                return grid_cfg[pair]
+            if "default" in grid_cfg:
+                return grid_cfg["default"]
+            return next(iter(grid_cfg.values()))
+        return grid_cfg
 
     def _evaluate_direction(
         self,

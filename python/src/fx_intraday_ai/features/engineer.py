@@ -23,6 +23,7 @@ class FeatureEngineer:
 
     def _build_features(self, df: pd.DataFrame) -> pd.DataFrame:
         feats = pd.DataFrame(index=df.index)
+        open_prices = df["open"] if "open" in df else df["close"]
         close = df["close"]
         high = df["high"]
         low = df["low"]
@@ -33,12 +34,22 @@ class FeatureEngineer:
         feats["log_ret_1"] = np.log(close / close.shift(1))
         feats["log_ret_3"] = np.log(close / close.shift(3))
         feats["log_ret_12"] = np.log(close / close.shift(12))
+        feats["log_ret_24"] = np.log(close / close.shift(24))
         feats["realized_vol_24"] = feats["log_ret_1"].rolling(24).std().fillna(0)
 
         # EMAs
         for window in self.cfg.ema_windows:
             feats[f"ema_{window}"] = close.ewm(span=window, adjust=False).mean()
             feats[f"ema_gap_{window}"] = close / feats[f"ema_{window}"] - 1.0
+
+        # MACD
+        fast_ema = close.ewm(span=12, adjust=False).mean()
+        slow_ema = close.ewm(span=26, adjust=False).mean()
+        macd_line = fast_ema - slow_ema
+        signal_line = macd_line.ewm(span=9, adjust=False).mean()
+        feats["macd_line"] = macd_line
+        feats["macd_signal"] = signal_line
+        feats["macd_hist"] = macd_line - signal_line
 
         # RSI
         delta = close.diff()
@@ -85,5 +96,74 @@ class FeatureEngineer:
         # Lag features for directionality
         feats["close_pct_rank_288"] = close.rolling(288).rank(pct=True)
         feats["range_pct_12"] = (close - low.rolling(12).min()) / (high.rolling(12).max() - low.rolling(12).min() + 1e-9)
+
+        # Stochastic oscillator
+        stoch_window = 14
+        lowest_low = low.rolling(stoch_window).min()
+        highest_high = high.rolling(stoch_window).max()
+        percent_k = (close - lowest_low) / (highest_high - lowest_low + 1e-9)
+        feats["stoch_k"] = percent_k
+        feats["stoch_d"] = percent_k.rolling(3).mean()
+
+        # CCI
+        typical_price = (high + low + close) / 3.0
+        cci_window = 20
+        tp_sma = typical_price.rolling(cci_window).mean()
+        tp_dev = (typical_price - tp_sma).abs().rolling(cci_window).mean()
+        feats["cci_20"] = (typical_price - tp_sma) / (0.015 * (tp_dev + 1e-9))
+
+        # ADX & directional indicators
+        adx_window = 14
+        up_move = high.diff()
+        down_move = -low.diff()
+        plus_dm = pd.Series(np.where((up_move > down_move) & (up_move > 0), up_move, 0.0), index=df.index)
+        minus_dm = pd.Series(np.where((down_move > up_move) & (down_move > 0), down_move, 0.0), index=df.index)
+        tr_ewm = tr.ewm(alpha=1 / adx_window, adjust=False).mean()
+        plus_di = 100 * plus_dm.ewm(alpha=1 / adx_window, adjust=False).mean() / (tr_ewm + 1e-9)
+        minus_di = 100 * minus_dm.ewm(alpha=1 / adx_window, adjust=False).mean() / (tr_ewm + 1e-9)
+        dx = (plus_di - minus_di).abs() / (plus_di + minus_di + 1e-9) * 100
+        feats["plus_di_14"] = plus_di
+        feats["minus_di_14"] = minus_di
+        feats["adx_14"] = dx.ewm(alpha=1 / adx_window, adjust=False).mean()
+
+        # Normalized volatility & spread
+        atr_ref = feats.get("atr_14", tr.rolling(14).mean())
+        feats["atr_ratio_14"] = atr_ref / (close + 1e-9)
+        feats["spread_pct"] = spread / (close + 1e-9)
+
+        # Volume dynamics
+        feats["volume_ret_3"] = volume.pct_change(3)
+        feats["volume_ret_12"] = volume.pct_change(12)
+        feats["price_volume_corr_48"] = feats["log_ret_1"].rolling(48).corr(volume.pct_change().rolling(48).mean())
+
+        # Skewness & kurtosis of returns
+        feats["ret_skew_48"] = feats["log_ret_1"].rolling(48).skew()
+        feats["ret_kurt_48"] = feats["log_ret_1"].rolling(48).kurt()
+
+        # Momentum and acceleration
+        feats["momentum_24"] = close / close.shift(24) - 1.0
+        feats["momentum_72"] = close / close.shift(72) - 1.0
+        feats["acceleration_24"] = feats["momentum_24"].diff(24)
+
+        # Heikin-Ashi derived signals
+        ha_close = (open_prices + high + low + close) / 4.0
+        ha_open = ha_close.copy()
+        ha_open.iloc[0] = (close.iloc[0] + open_prices.iloc[0]) / 2
+        for idx_pos in range(1, len(ha_open)):
+            ha_open.iloc[idx_pos] = (ha_open.iloc[idx_pos - 1] + ha_close.iloc[idx_pos - 1]) / 2
+        feats["ha_close"] = ha_close
+        feats["ha_open"] = ha_open
+        feats["ha_body"] = ha_close - ha_open
+
+        # VWAP ratio (using cumulative intraday volume)
+        typical_price = (high + low + close) / 3.0
+        cum_volume = volume.cumsum()
+        cum_vwap = (typical_price * volume).cumsum() / (cum_volume + 1e-9)
+        feats["vwap_ratio"] = close / (cum_vwap + 1e-9) - 1.0
+
+        # Rolling quantiles
+        feats["close_p90_48"] = close.rolling(48).quantile(0.9)
+        feats["close_p10_48"] = close.rolling(48).quantile(0.1)
+        feats["close_spread_p9010"] = feats["close_p90_48"] - feats["close_p10_48"]
 
         return feats
