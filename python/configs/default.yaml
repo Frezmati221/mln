@@ -14,11 +14,11 @@ data:
   start_date: "2015-01-01"
   end_date: null
 features:
-  ema_windows: [5, 13, 21, 55, 89, 144, 233]
-  rsi_windows: [7, 14, 21]
-  atr_windows: [7, 14]
+  ema_windows: [5, 8, 13, 21, 34, 55, 89, 144, 233]
+  rsi_windows: [7, 14, 21, 34]
+  atr_windows: [7, 14, 28]
   bollinger:
-    window: 20
+    window: 34
     num_std: 2.0
   regime_features:
     enable_vix_proxy: true
@@ -30,15 +30,15 @@ labels:
   sl_grid_pips:
     default: [4, 6, 9, 14, 21, 34]
     USDJPY: [3, 5, 8, 13, 21, 34]
-  transaction_cost_pips: 1.2
+  transaction_cost_pips: 1.0
   reward_metric: sharpe
 model:
   type: multitask_transformer
-  hidden_dim: 256
-  num_layers: 4
-  num_heads: 8
-  dropout: 0.15
-  max_seq_len: 256
+  hidden_dim: 320
+  num_layers: 5
+  num_heads: 10
+  dropout: 0.2
+  max_seq_len: 320
   loss_weights:
     direction: 1.0
     take_profit: 0.7
@@ -46,15 +46,15 @@ model:
     holding_minutes: 0.3
   uncertainty_head: true
 training:
-  batch_size: 32
-  learning_rate: 0.0005
-  weight_decay: 0.01
+  batch_size: 48
+  learning_rate: 0.0004
+  weight_decay: 0.02
   max_epochs: 3
   gradient_clip_norm: 1.0
   walk_forward:
-    window_days: 90
-    step_days: 30
-  mixed_precision: false
+    window_days: 120
+    step_days: 20
+  mixed_precision: true
   num_workers: 8
 backtest:
   slippage_pips: 0.2

@@ -198,12 +198,14 @@ class ModelTrainer:
 
                 for batch_pos, sample_id in enumerate(meta_ids):
                     pair, timestamp = dataset.sample_metadata(int(sample_id))
+                    conf = float(probs[batch_pos].max().item())
                     records.append(
                         {
                             "timestamp": timestamp,
                             "pair": pair,
                             "direction_class": int(direction_pred[batch_pos].item()),
                             "direction_prob": probs[batch_pos].tolist(),
+                            "direction_conf": conf,
                             "tp_pips": float(tp_pred[batch_pos].item()),
                             "sl_pips": float(sl_pred[batch_pos].item()),
                             "holding_minutes": float(hold_pred[batch_pos].item()),

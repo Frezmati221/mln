@@ -135,7 +135,20 @@ def train_command(
     is_flag=True,
     help="Force retraining even if cached predictions exist.",
 )
-def backtest_command(config_path: str, refresh_cache: bool, predictions_path: str, retrain: bool) -> None:
+@click.option(
+    "--min-confidence",
+    type=float,
+    default=0.0,
+    show_default=True,
+    help="Minimum direction confidence required to include a signal in backtest.",
+)
+def backtest_command(
+    config_path: str,
+    refresh_cache: bool,
+    predictions_path: str,
+    retrain: bool,
+    min_confidence: float,
+) -> None:
     cfg = load_config(Path(config_path))
     pred_path = Path(predictions_path)
     predictions: Optional[pd.DataFrame] = None
@@ -154,6 +167,14 @@ def backtest_command(config_path: str, refresh_cache: bool, predictions_path: st
         pred_path.parent.mkdir(parents=True, exist_ok=True)
         predictions.reset_index().to_parquet(pred_path, index=False)
         console.print(f"Predictions saved to {pred_path}")
+    predictions = predictions.copy()
+    predictions = _ensure_timestamp_index(predictions)
+    if min_confidence > 0:
+        if "direction_conf" not in predictions.columns:
+            predictions["direction_conf"] = predictions["direction_prob"].apply(lambda probs: max(probs) if isinstance(probs, list) else 1.0)
+        before = len(predictions)
+        predictions = predictions[predictions["direction_conf"] >= min_confidence]
+        console.print(f"Applied confidence filter {min_confidence}; {before}->{len(predictions)} rows.")
 
     pipeline = DataPipeline(cfg)
     price_frames = pipeline.load_prices(refresh_cache=refresh_cache)
@@ -194,6 +215,7 @@ def _ensure_timestamp_index(df: pd.DataFrame) -> pd.DataFrame:
         df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
         df = df.set_index("timestamp")
     elif df.index.name != "timestamp":
+        df = df.copy()
         df.index = pd.to_datetime(df.index, utc=True)
     return df
 
