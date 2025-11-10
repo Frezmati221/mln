@@ -14,11 +14,11 @@ data:
   start_date: "2015-01-01"
   end_date: null
 features:
-  ema_windows: [5, 8, 13, 21, 34, 55, 89, 144, 233]
-  rsi_windows: [7, 14, 21, 34]
-  atr_windows: [7, 14, 28]
+  ema_windows: [5, 13, 21, 55, 89, 144, 233]
+  rsi_windows: [7, 14, 21]
+  atr_windows: [7, 14]
   bollinger:
-    window: 34
+    window: 20
     num_std: 2.0
   regime_features:
     enable_vix_proxy: true
@@ -30,11 +30,11 @@ labels:
   reward_metric: sharpe
 model:
   type: multitask_transformer
-  hidden_dim: 512
-  num_layers: 6
-  num_heads: 16
-  dropout: 0.1
-  max_seq_len: 384
+  hidden_dim: 256
+  num_layers: 4
+  num_heads: 8
+  dropout: 0.15
+  max_seq_len: 256
   loss_weights:
     direction: 1.0
     take_profit: 0.7
@@ -42,15 +42,15 @@ model:
     holding_minutes: 0.3
   uncertainty_head: true
 training:
-  batch_size: 64
-  learning_rate: 0.0003
-  weight_decay: 0.015
-  max_epochs: 15
+  batch_size: 32
+  learning_rate: 0.0005
+  weight_decay: 0.01
+  max_epochs: 3
   gradient_clip_norm: 1.0
   walk_forward:
-    window_days: 120
+    window_days: 90
     step_days: 30
-  mixed_precision: true
+  mixed_precision: false
   num_workers: 8
 backtest:
   slippage_pips: 0.2
