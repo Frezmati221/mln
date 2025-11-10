@@ -1,0 +1,62 @@
+pairs:
+  - EURUSD
+  - USDJPY
+  - GBPUSD
+timeframe_minutes: 5
+session_close_utc: "21:59"
+max_holding_minutes: 240
+data:
+  price_path: data/raw/prices.parquet
+  macro_path: data/raw/macro_events.parquet
+  sentiment_path: data/raw/sentiment.parquet
+  calendar_path: data/raw/calendar.csv
+  cache_dir: data/cache
+  start_date: "2015-01-01"
+  end_date: null
+features:
+  ema_windows: [5, 8, 13, 21, 34, 55, 89, 144, 233]
+  rsi_windows: [7, 14, 21, 34]
+  atr_windows: [7, 14, 28]
+  bollinger:
+    window: 34
+    num_std: 2.0
+  regime_features:
+    enable_vix_proxy: true
+    enable_session_embeds: true
+labels:
+  tp_grid_pips: [5, 8, 13, 21, 34, 55]
+  sl_grid_pips: [5, 8, 13, 21, 34, 55]
+  transaction_cost_pips: 1.2
+  reward_metric: sharpe
+model:
+  type: multitask_transformer
+  hidden_dim: 512
+  num_layers: 6
+  num_heads: 16
+  dropout: 0.1
+  max_seq_len: 384
+  loss_weights:
+    direction: 1.0
+    take_profit: 0.7
+    stop_loss: 0.7
+    holding_minutes: 0.3
+  uncertainty_head: true
+training:
+  batch_size: 64
+  learning_rate: 0.0003
+  weight_decay: 0.015
+  max_epochs: 15
+  gradient_clip_norm: 1.0
+  walk_forward:
+    window_days: 120
+    step_days: 30
+  mixed_precision: true
+  num_workers: 8
+backtest:
+  slippage_pips: 0.2
+  spread_pips:
+    EURUSD: 0.8
+    USDJPY: 0.9
+    GBPUSD: 1.2
+  risk_per_trade: 0.005
+  max_daily_drawdown: 0.02

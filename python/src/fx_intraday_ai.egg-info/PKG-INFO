@@ -1,0 +1,79 @@
+Metadata-Version: 2.4
+Name: fx_intraday_ai
+Version: 0.1.0
+Summary: Intraday FX multi-task AI pipeline for EURUSD/USDJPY/GBPUSD on 5-minute bars.
+Author: Codex
+License: Proprietary
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: pandas>=2.2.0
+Requires-Dist: numpy>=1.26.0
+Requires-Dist: scipy>=1.11.0
+Requires-Dist: scikit-learn>=1.4.0
+Requires-Dist: torch>=2.2.0
+Requires-Dist: lightgbm>=4.1.0
+Requires-Dist: ta>=0.11.0
+Requires-Dist: pyyaml>=6.0.1
+Requires-Dist: pydantic>=2.6.0
+Requires-Dist: mlflow>=2.9.0
+Requires-Dist: rich>=13.7.0
+Requires-Dist: requests>=2.31.0
+Requires-Dist: click>=8.1.3
+Requires-Dist: numba>=0.58.0
+
+# Intraday FX Trade Generator
+
+This project scaffolds a multi-task AI pipeline that issues intraday trade instructions
+(direction, stop-loss, take-profit) for the `EURUSD`, `USDJPY`, and `GBPUSD` forex pairs
+on 5-minute bars. The system is designed to stay flat by the daily session close and
+optimize TP/SL placement based on current microstructure and regime context.
+
+## Key Capabilities
+
+1. **Data ingest & labeling** – Loads multi-source market data, aligns it on 5-minute
+   intervals, and derives optimal intraday TP/SL targets under cost constraints.
+2. **Feature engineering** – Produces a rich technical, microstructure, and macro feature
+   set while encoding session and regime characteristics.
+3. **Multi-task modeling** – Shares a temporal encoder across heads that predict trade
+   direction, TP distance, SL distance, and expected holding time.
+4. **Backtesting & risk** – Simulates realistic execution with slippage/spread,
+   enforces intraday flat rules, and reports trading KPIs.
+
+## Repository Layout
+
+```
+python/
+├── requirements.txt        # Python dependencies
+├── README.md               # This guide
+└── src/
+    └── fx_intraday_ai/     # Source package (data, models, training, backtests)
+```
+
+## Getting Started
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+If you prefer not to install the package, export `PYTHONPATH=src` before invoking the CLI.
+
+Detailed usage instructions and configuration options are documented inline within the
+package modules.
+
+## Downloading Historical Data
+
+Use the built-in downloader to fetch Dukascopy tick data and aggregate it into 5-minute
+bars compatible with the rest of the pipeline:
+
+```bash
+python -m fx_intraday_ai.cli download-data \
+  --start 2022-01-01 \
+  --end 2023-01-01 \
+  --pair EURUSD --pair USDJPY --pair GBPUSD
+```
+
+The parquet output defaults to `data/raw/prices.parquet` (from `configs/default.yaml`).
+Override it with `--output path/to/prices.parquet` or change the bar size via
+`--timeframe 15`.
