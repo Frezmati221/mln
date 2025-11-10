@@ -38,6 +38,8 @@ class Backtester:
             if pair not in self.price_frames:
                 continue
             trades.extend(self._simulate_pair(pair, pair_signals.sort_index()))
+        if not trades:
+            raise ValueError("No trades were generated from the supplied predictions.")
         trade_df = pd.DataFrame([asdict(trade) for trade in trades])
         trade_df.set_index("timestamp", inplace=True)
         return trade_df

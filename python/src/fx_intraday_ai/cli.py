@@ -158,7 +158,11 @@ def backtest_command(config_path: str, refresh_cache: bool, predictions_path: st
     pipeline = DataPipeline(cfg)
     price_frames = pipeline.load_prices(refresh_cache=refresh_cache)
     backtester = Backtester(cfg, price_frames)
-    trades = backtester.simulate(predictions)
+    try:
+        trades = backtester.simulate(predictions)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise SystemExit(1) from exc
     summary = backtester.summarize(trades)
 
     table = Table(title="Backtest Summary")
