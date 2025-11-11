@@ -45,7 +45,9 @@ class DataPipeline:
                 "volatility_target",
                 "regime_target",
             ]
-            df.dropna(subset=label_cols, inplace=True)
+            drop_cols = [col for col in label_cols if col in df.columns]
+            if drop_cols:
+                df.dropna(subset=drop_cols, inplace=True)
             df.ffill(inplace=True)
             df.bfill(inplace=True)
             df["volatility_target"] = (df["realized_vol_24"] > df["realized_vol_24"].median()).astype(float)
