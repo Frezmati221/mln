@@ -36,7 +36,18 @@ class DataPipeline:
             if pair not in label_frames:
                 raise KeyError(f"Missing labels for {pair}")
             df = feature_frame.data.join(label_frames[pair].data, how="inner")
-            df.dropna(inplace=True)
+            label_cols = [
+                "direction",
+                "tp_pips",
+                "sl_pips",
+                "holding_minutes",
+                "edge_pips",
+                "volatility_target",
+                "regime_target",
+            ]
+            df.dropna(subset=label_cols, inplace=True)
+            df.ffill(inplace=True)
+            df.bfill(inplace=True)
             df["volatility_target"] = (df["realized_vol_24"] > df["realized_vol_24"].median()).astype(float)
             df["regime_target"] = df.index.tz_convert("UTC").hour.map(lambda h: 1.0 if 12 <= h < 21 else 0.0)
             merged[pair] = df
