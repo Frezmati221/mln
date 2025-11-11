@@ -7,9 +7,9 @@ session_close_utc: "21:59"
 max_holding_minutes: 240
 data:
   price_path: data/raw/prices.parquet
-  macro_path: data/raw/macro_events.parquet
-  sentiment_path: data/raw/sentiment.parquet
-  calendar_path: data/raw/calendar.csv
+  macro_path: null
+  sentiment_path: null
+  calendar_path: null
   cache_dir: data/cache
   start_date: "2015-01-01"
   end_date: null
@@ -21,9 +21,9 @@ features:
     window: 34
     num_std: 2.0
   regime_features:
-    enable_vix_proxy: true
+    enable_vix_proxy: false
     enable_session_embeds: true
-    enable_macro_event_flags: true
+    enable_macro_event_flags: false
   multi_scale_windows: [5, 15, 60]
 labels:
   tp_grid_pips:
