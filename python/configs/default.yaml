@@ -33,7 +33,7 @@ labels:
     default: [3, 5, 8, 13]
     USDJPY: [2, 4, 7, 12]
   transaction_cost_pips: 1.0
-  min_tp_sl_ratio: 1.5
+  min_tp_sl_ratio: 1.1
   reward_metric: sharpe
 model:
   type: multitask_transformer
@@ -50,7 +50,7 @@ model:
     take_profit: 0.7
     stop_loss: 0.7
     holding_minutes: 0.3
-    direction_balance: 0.2
+    direction_balance: 0.0
   uncertainty_head: true
   auxiliary_heads:
     volatility: true
@@ -59,11 +59,11 @@ training:
   batch_size: 48
   learning_rate: 0.0004
   weight_decay: 0.02
-  max_epochs: 3
+  max_epochs: 8
   gradient_clip_norm: 1.0
   walk_forward:
-    window_days: 150
-    step_days: 15
+    window_days: 30
+    step_days: 7
   early_stopping_patience: 2
   mixed_precision: true
   num_workers: 8
@@ -75,8 +75,8 @@ training:
     time_shift_prob: 0.5
     feature_noise_std: 0.02
     atr_jitter_pct: 0.1
-  direction_focal_gamma: 3.0
-  direction_class_weights: [1.5, 0.4, 1.5]
+  direction_focal_gamma: 0.0
+  direction_class_weights: null
 backtest:
   slippage_pips: 0.2
   spread_pips:
