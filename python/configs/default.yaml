@@ -93,9 +93,9 @@ backtest:
   min_adx: 15.0
   max_concurrent_trades: 2
   max_daily_drawdown: 0.02
-  sentiment_zscore_min: -1.5
-  sentiment_zscore_max: 1.5
-  max_event_importance: 0.5
-  max_macro_event_count: 3
-  vix_zscore_min: -0.5
-  vix_zscore_max: 2.5
+  sentiment_zscore_min: -3.0
+  sentiment_zscore_max: 3.0
+  max_event_importance: 1.0
+  max_macro_event_count: 10
+  vix_zscore_min: -1.0
+  vix_zscore_max: 4.0
