@@ -54,6 +54,7 @@ class ModelLossWeights(BaseModel):
     take_profit: float = 1.0
     stop_loss: float = 1.0
     holding_minutes: float = 0.5
+    edge: float = 0.5
     direction_balance: float = 0.0
     volatility: float = 0.0
     regime: float = 0.0
@@ -112,6 +113,7 @@ class BacktestConfig(BaseModel):
     confidence_risk_power: float = 1.0
     session_spreads: Optional[Dict[str, float]] = None
     min_adx: float = 0.0
+    min_edge_pips: Optional[float] = None
     max_concurrent_trades: int = 1
     max_daily_drawdown: float = 0.02
     sentiment_zscore_min: Optional[float] = None

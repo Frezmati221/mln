@@ -92,6 +92,8 @@ def _aggregate_ensemble_predictions(predictions: List[pd.DataFrame]) -> pd.DataF
             "adx_14": group["adx_14"].mean(),
             "session": group["session"].iloc[0],
         }
+        if "edge_pred_pips" in group.columns:
+            record["edge_pred_pips"] = group["edge_pred_pips"].mean()
         if "volatility_prob" in group.columns:
             record["volatility_prob"] = _mean_probabilities(group["volatility_prob"])
         if "regime_prob" in group.columns:
@@ -262,9 +264,11 @@ class ModelTrainer:
             pt = probs.gather(1, targets["direction"].unsqueeze(-1)).squeeze(-1)
             focal_factor = (1.0 - pt).pow(self.direction_gamma)
             ce = ce * focal_factor
-        direction_loss = ce.mean()
+        dir_weights = 1.0 + torch.relu(targets["edge"])
+        weight_norm = torch.clamp(dir_weights.sum(), min=1.0)
+        direction_loss = (ce * dir_weights).sum() / weight_norm
 
-        sample_weight = (1.0 + torch.relu(targets["edge"])).unsqueeze(-1)
+        sample_weight = dir_weights.unsqueeze(-1)
         tp_loss = self.criterion_reg(outputs["tp"].squeeze(-1), targets["tp"])
         sl_loss = self.criterion_reg(outputs["sl"].squeeze(-1), targets["sl"])
         hold_loss = self.criterion_reg(outputs["holding"].squeeze(-1), targets["holding"])
@@ -285,6 +289,10 @@ class ModelTrainer:
         if "regime_logits" in outputs and loss_weights.regime > 0:
             regime_loss = self.criterion_aux(outputs["regime_logits"], targets["regime_target"])
             total_loss += loss_weights.regime * regime_loss
+        if "edge" in outputs and loss_weights.edge > 0:
+            edge_loss = self.criterion_reg(outputs["edge"].squeeze(-1), targets["edge"])
+            edge_loss = (edge_loss * dir_weights).mean()
+            total_loss += loss_weights.edge * edge_loss
         if loss_weights.direction_balance > 0:
             probs = torch.softmax(outputs["direction_logits"], dim=-1)
             balance_penalty = (probs[:, 0] - probs[:, 2]).mean().abs()
@@ -315,6 +323,8 @@ class ModelTrainer:
                 regime_logits = outputs.get("regime_logits")
                 vol_prob = torch.softmax(volatility_logits, dim=-1).cpu() if volatility_logits is not None else None
                 regime_prob = torch.softmax(regime_logits, dim=-1).cpu() if regime_logits is not None else None
+                edge_pred = outputs.get("edge")
+                edge_values = edge_pred.squeeze(-1).cpu() if edge_pred is not None else None
 
                 for batch_pos, sample_id in enumerate(meta_ids):
                     pair, timestamp = dataset.sample_metadata(int(sample_id))
@@ -326,6 +336,9 @@ class ModelTrainer:
                     event_count = dataset.meta_value(pair, timestamp, "event_macro_event_count")
                     vix_z = dataset.meta_value(pair, timestamp, "vix_zscore_96")
                     session = self._session_label(timestamp)
+                    pred_edge = (
+                        float(max(edge_values[batch_pos].item(), 0.0)) if edge_values is not None else float("nan")
+                    )
                     records.append(
                         {
                             "timestamp": timestamp,
@@ -338,6 +351,7 @@ class ModelTrainer:
                             "holding_minutes": float(hold_pred[batch_pos].item()),
                             "adx_14": float(adx_val),
                             "session": session,
+                            "edge_pred_pips": pred_edge,
                             "sentiment_score": float(sentiment_val),
                             "sentiment_zscore_96": float(sentiment_z),
                             "event_high_impact": float(event_high),

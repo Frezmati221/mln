@@ -72,6 +72,14 @@ Override it with `--output path/to/prices.parquet` or change the bar size via
    refresh predictions before simulating. You can also override paths via
    `--predictions-path` on both commands.
 
+### Edge-aware filtering
+
+The transformer now learns to predict the expected edge (in pips) for every trade
+candidate. During backtests we ignore signals whose predicted edge is below
+`backtest.min_edge_pips` (default `3.0`) or a custom `--min-edge` CLI override. This
+keeps the model focused on imbalance regimes where the TP/SL grid historically offered
+positive expectancy, which materially improves hit rate versus taking every signal.
+
 ## Quick Status Check
 
 Need to know what to do next? Run:

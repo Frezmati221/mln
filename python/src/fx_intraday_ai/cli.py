@@ -141,14 +141,23 @@ def train_command(
     show_default=True,
     help="Minimum direction confidence required to include a signal in backtest.",
 )
+@click.option(
+    "--min-edge",
+    type=float,
+    default=None,
+    help="Minimum predicted edge (pips) required to include a signal.",
+)
 def backtest_command(
     config_path: str,
     refresh_cache: bool,
     predictions_path: str,
     retrain: bool,
     min_confidence: float,
+    min_edge: Optional[float],
 ) -> None:
     cfg = load_config(Path(config_path))
+    if min_edge is not None:
+        cfg.backtest.min_edge_pips = min_edge
     pred_path = Path(predictions_path)
     predictions: Optional[pd.DataFrame] = None
 
@@ -174,6 +183,17 @@ def backtest_command(
         before = len(predictions)
         predictions = predictions[predictions["direction_conf"] >= min_confidence]
         console.print(f"Applied confidence filter {min_confidence}; {before}->{len(predictions)} rows.")
+    min_edge_cfg = cfg.backtest.min_edge_pips
+    if min_edge_cfg is not None and min_edge_cfg > 0:
+        if "edge_pred_pips" not in predictions.columns:
+            console.print(
+                "[yellow]Predictions missing edge_pred_pips; re-run train before applying --min-edge.[/yellow]"
+            )
+            cfg.backtest.min_edge_pips = None
+        else:
+            before = len(predictions)
+            predictions = predictions[predictions["edge_pred_pips"] >= min_edge_cfg]
+            console.print(f"Applied edge filter {min_edge_cfg} pips; {before}->{len(predictions)} rows.")
 
     pipeline = DataPipeline(cfg)
     price_frames = pipeline.load_prices(refresh_cache=refresh_cache)
@@ -426,6 +446,7 @@ def infer_command(config_path: str, model_path: Optional[str], seq_len: Optional
     table.add_column("TP (pips)", justify="right")
     table.add_column("SL (pips)", justify="right")
     table.add_column("Hold (min)", justify="right")
+    table.add_column("Edge (pips)", justify="right")
 
     dir_text = {1: "LONG", -1: "SHORT", 0: "FLAT"}
     produced = 0
@@ -451,6 +472,7 @@ def infer_command(config_path: str, model_path: Optional[str], seq_len: Optional
         tp = float(outputs["tp"].squeeze().item())
         sl = float(outputs["sl"].squeeze().item())
         hold = float(outputs["holding"].squeeze().item())
+        edge_pred = float(outputs["edge"].squeeze().item()) if "edge" in outputs else float("nan")
         ts = df.index[-1]
         table.add_row(
             pair,
@@ -460,6 +482,7 @@ def infer_command(config_path: str, model_path: Optional[str], seq_len: Optional
             f"{tp:.2f}",
             f"{sl:.2f}",
             f"{hold:.1f}",
+            f"{edge_pred:.2f}",
         )
         produced += 1
 

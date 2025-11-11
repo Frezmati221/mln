@@ -50,6 +50,7 @@ model:
     take_profit: 0.7
     stop_loss: 0.7
     holding_minutes: 0.3
+    edge: 0.5
     direction_balance: 0.0
   uncertainty_head: true
   auxiliary_heads:
@@ -91,7 +92,8 @@ backtest:
     europe: 1.0
     us: 0.9
   min_adx: 15.0
-  max_concurrent_trades: 2
+  min_edge_pips: 3.0
+  max_concurrent_trades: 1
   max_daily_drawdown: 0.02
   sentiment_zscore_min: null
   sentiment_zscore_max: null

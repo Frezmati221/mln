@@ -28,6 +28,7 @@ class TradeRecord:
     session: str
     adx_14: float
     cost_pips: float
+    edge_pred_pips: float
     sentiment_zscore: float
     event_high_impact: float
     event_macro_event_count: float
@@ -69,6 +70,7 @@ class Backtester:
         pair_spread = self.cfg.backtest.spread_pips.get(pair, self.cfg.backtest.spread_pips.get("default", 0.0))
         session_spreads = self.cfg.backtest.session_spreads or {}
         min_adx = self.cfg.backtest.min_adx
+        min_edge = self.cfg.backtest.min_edge_pips
         comfort_ratio = getattr(self.cfg.labels, "min_tp_sl_ratio", 1.0)
         max_concurrent = max(1, self.cfg.backtest.max_concurrent_trades)
         dynamic_risk = self.cfg.backtest.dynamic_risk
@@ -89,6 +91,9 @@ class Backtester:
                 continue
 
             conf = self._signal_confidence(signal)
+            edge_pred = float(signal.get("edge_pred_pips", np.nan))
+            if min_edge is not None and (np.isnan(edge_pred) or edge_pred < min_edge):
+                continue
             session = signal.get("session") or self._session_label(ts)
             adx_val = float(signal.get("adx_14", np.nan))
             if min_adx > 0 and (np.isnan(adx_val) or adx_val < min_adx):
@@ -172,6 +177,7 @@ class Backtester:
                     session=session,
                     adx_14=adx_val,
                     cost_pips=trade_cost,
+                    edge_pred_pips=edge_pred,
                     sentiment_zscore=sentiment_z,
                     event_high_impact=event_importance,
                     event_macro_event_count=event_count,

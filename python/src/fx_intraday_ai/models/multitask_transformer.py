@@ -60,6 +60,7 @@ class MultiTaskTransformer(nn.Module):
         self.tp_head = nn.Linear(cfg.hidden_dim, 1)
         self.sl_head = nn.Linear(cfg.hidden_dim, 1)
         self.holding_head = nn.Linear(cfg.hidden_dim, 1)
+        self.edge_head = nn.Linear(cfg.hidden_dim, 1)
         self.uncertainty_head = nn.Linear(cfg.hidden_dim, 1) if cfg.uncertainty_head else None
         self.volatility_head = nn.Linear(cfg.hidden_dim, 2) if cfg.auxiliary_heads.get("volatility") else None
         self.regime_head = nn.Linear(cfg.hidden_dim, 2) if cfg.auxiliary_heads.get("regime") else None
@@ -80,6 +81,7 @@ class MultiTaskTransformer(nn.Module):
             "tp": torch.relu(self.tp_head(pooled)),
             "sl": torch.relu(self.sl_head(pooled)),
             "holding": torch.relu(self.holding_head(pooled)),
+            "edge": torch.relu(self.edge_head(pooled)),
         }
         if self.uncertainty_head is not None:
             outputs["uncertainty"] = F.softplus(self.uncertainty_head(pooled))
