@@ -80,6 +80,15 @@ candidate. During backtests we ignore signals whose predicted edge is below
 keeps the model focused on imbalance regimes where the TP/SL grid historically offered
 positive expectancy, which materially improves hit rate versus taking every signal.
 
+### High-edge curriculum
+
+Low-edge timestamps tend to label as flat, which overwhelms the direction head. You can
+now focus training on the most actionable slices via `training.min_edge_pips` (skip
+examples whose historical reward was weaker than the threshold) and
+`training.flat_class_dropout` (probability of discarding flat labels during training).
+Together these act as a curriculum that doubles down on favorable opportunities and
+materially improves walk-forward win rate without adding latency at inference.
+
 ## Quick Status Check
 
 Need to know what to do next? Run:

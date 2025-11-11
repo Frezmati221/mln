@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
+from contextlib import nullcontext
 
 import pandas as pd
 import numpy as np
@@ -141,7 +142,8 @@ class ModelTrainer:
             lr=cfg.training.learning_rate,
             weight_decay=cfg.training.weight_decay,
         )
-        self.grad_scaler = torch.cuda.amp.GradScaler(enabled=cfg.training.mixed_precision and torch.cuda.is_available())
+        self.use_amp = cfg.training.mixed_precision and torch.cuda.is_available()
+        self.grad_scaler = torch.amp.GradScaler(device_type="cuda") if self.use_amp else None
         self.criterion_dir = nn.CrossEntropyLoss()
         self.criterion_reg = nn.SmoothL1Loss(reduction="none")
         self.criterion_aux = nn.CrossEntropyLoss()
@@ -231,16 +233,26 @@ class ModelTrainer:
             features, targets = batch
             features = features.to(self.device)
             target_tensors = {k: v.to(self.device) for k, v in targets.items()}
-            with torch.cuda.amp.autocast(enabled=self.cfg.training.mixed_precision and torch.cuda.is_available()):
+            if self.use_amp:
+                autocast_cm = torch.amp.autocast(device_type="cuda")
+            else:
+                autocast_cm = nullcontext()
+            with autocast_cm:
                 outputs = self.model(features, target_tensors["pair_idx"])
                 loss, direction_logits = self._compute_loss(outputs, target_tensors)
 
             if training:
                 self.optimizer.zero_grad(set_to_none=True)
-                self.grad_scaler.scale(loss).backward()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.cfg.training.gradient_clip_norm)
-                self.grad_scaler.step(self.optimizer)
-                self.grad_scaler.update()
+                if self.grad_scaler is not None:
+                    self.grad_scaler.scale(loss).backward()
+                    self.grad_scaler.unscale_(self.optimizer)
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.cfg.training.gradient_clip_norm)
+                    self.grad_scaler.step(self.optimizer)
+                    self.grad_scaler.update()
+                else:
+                    loss.backward()
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.cfg.training.gradient_clip_norm)
+                    self.optimizer.step()
 
             batch_size = features.size(0)
             total_loss += loss.item() * batch_size
@@ -438,6 +450,8 @@ class TrainingManager:
                     is_training=True,
                     seed=seed,
                     raw_frames=split.train,
+                    min_edge_pips=self.cfg.training.min_edge_pips,
+                    flat_class_dropout=self.cfg.training.flat_class_dropout,
                 )
                 if len(train_ds) == 0:
                     continue

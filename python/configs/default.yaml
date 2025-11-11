@@ -78,6 +78,8 @@ training:
     atr_jitter_pct: 0.1
   direction_focal_gamma: 0.0
   direction_class_weights: null
+  min_edge_pips: 2.5
+  flat_class_dropout: 0.55
 backtest:
   slippage_pips: 0.2
   spread_pips:

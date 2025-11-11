@@ -103,6 +103,8 @@ class TrainingConfig(BaseModel):
     augmentation: Optional[AugmentationConfig] = None
     direction_focal_gamma: float = 0.0
     direction_class_weights: Optional[List[float]] = None
+    min_edge_pips: Optional[float] = None
+    flat_class_dropout: float = 0.0
 
 
 class BacktestConfig(BaseModel):

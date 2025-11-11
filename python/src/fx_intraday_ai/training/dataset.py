@@ -53,6 +53,8 @@ class SequenceDataset(Dataset):
         is_training: bool = False,
         seed: Optional[int] = None,
         raw_frames: Optional[Dict[str, pd.DataFrame]] = None,
+        min_edge_pips: Optional[float] = None,
+        flat_class_dropout: float = 0.0,
     ):
         self.seq_len = seq_len
         self.feature_columns = feature_columns
@@ -62,7 +64,10 @@ class SequenceDataset(Dataset):
         self.meta_frames = raw_frames if raw_frames is not None else frames
         self.is_training = is_training
         self.augmentation = augmentation if is_training and augmentation and augmentation.enabled else None
-        self.rng = np.random.default_rng(seed) if self.augmentation is not None else None
+        self.min_edge_pips = min_edge_pips if is_training else None
+        self.flat_class_dropout = flat_class_dropout if is_training else 0.0
+        rng_needed = (self.augmentation is not None) or (self.flat_class_dropout > 0)
+        self.rng = np.random.default_rng(seed) if rng_needed else None
         self._build_samples(frames)
 
     def _build_samples(self, frames: Dict[str, pd.DataFrame]) -> None:
@@ -71,12 +76,20 @@ class SequenceDataset(Dataset):
             feature_values = df[self.feature_columns].to_numpy(dtype=np.float32)
             labels = df[TARGET_COLUMNS].to_numpy(dtype=np.float32)
             aux = df[AUX_TARGET_COLUMNS].to_numpy(dtype=np.float32)
+            flat_class = DIR_TO_CLASS[0]
             for idx in range(self.seq_len, len(df)):
                 window = feature_values[idx - self.seq_len : idx]
                 direction_raw = int(labels[idx, 0])
                 direction_class = DIR_TO_CLASS.get(direction_raw, 1)
                 vol_label = int(aux[idx, 0] > 0.5)
                 regime_label = int(aux[idx, 1] > 0.5)
+                edge_val = float(labels[idx, 4])
+                if self.min_edge_pips is not None and edge_val < self.min_edge_pips:
+                    continue
+                if self.flat_class_dropout > 0 and direction_class == flat_class:
+                    drop_rand = self._rng_random()
+                    if drop_rand < self.flat_class_dropout:
+                        continue
                 target = np.array(
                     [
                         direction_class,
@@ -129,21 +142,22 @@ class SequenceDataset(Dataset):
         timestamp: pd.Timestamp,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         aug = self.augmentation
-        assert aug is not None and self.rng is not None
+        assert aug is not None
+        rng = self._rng()
         if aug.time_shift_range > 0 and aug.time_shift_prob > 0:
-            if self.rng.random() < aug.time_shift_prob:
-                shift = int(self.rng.integers(-aug.time_shift_range, aug.time_shift_range + 1))
+            if rng.random() < aug.time_shift_prob:
+                shift = int(rng.integers(-aug.time_shift_range, aug.time_shift_range + 1))
                 if shift != 0:
                     features = self._time_shift(features, shift)
         if aug.feature_noise_std > 0:
             noise = torch.from_numpy(
-                self.rng.normal(0.0, aug.feature_noise_std, size=features.shape).astype(np.float32)
+                rng.normal(0.0, aug.feature_noise_std, size=features.shape).astype(np.float32)
             )
             features = features + noise
         if aug.atr_jitter_pct > 0:
             atr_val = self._lookup_indicator(pair, timestamp, "atr_14")
             if not np.isnan(atr_val):
-                scale = float(1.0 + self.rng.normal(0.0, aug.atr_jitter_pct))
+                scale = float(1.0 + rng.normal(0.0, aug.atr_jitter_pct))
                 scale = float(np.clip(scale, 0.5, 1.5))
                 target[1] = torch.relu(target[1] * scale)
                 target[2] = torch.relu(target[2] * scale)
@@ -176,3 +190,11 @@ class SequenceDataset(Dataset):
 
     def meta_value(self, pair: str, timestamp: pd.Timestamp, column: str) -> float:
         return self._lookup_indicator(pair, timestamp, column)
+
+    def _rng(self) -> np.random.Generator:
+        if self.rng is None:
+            self.rng = np.random.default_rng()
+        return self.rng
+
+    def _rng_random(self) -> float:
+        return float(self._rng().random())
