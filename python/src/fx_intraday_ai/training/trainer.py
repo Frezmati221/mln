@@ -143,7 +143,19 @@ class ModelTrainer:
             weight_decay=cfg.training.weight_decay,
         )
         self.use_amp = cfg.training.mixed_precision and torch.cuda.is_available()
-        self.grad_scaler = torch.amp.GradScaler(device_type="cuda") if self.use_amp else None
+        self._amp_backend = None
+        if self.use_amp and hasattr(torch, "amp") and hasattr(torch.amp, "autocast"):
+            self._amp_backend = "torch.amp"
+            try:
+                self.grad_scaler = torch.amp.GradScaler("cuda")
+            except TypeError:
+                self.grad_scaler = torch.amp.GradScaler("cuda", enabled=True)
+        elif self.use_amp and hasattr(torch.cuda, "amp"):
+            self._amp_backend = "torch.cuda.amp"
+            self.grad_scaler = torch.cuda.amp.GradScaler(enabled=True)
+        else:
+            self.grad_scaler = None
+            self.use_amp = False
         self.criterion_dir = nn.CrossEntropyLoss()
         self.criterion_reg = nn.SmoothL1Loss(reduction="none")
         self.criterion_aux = nn.CrossEntropyLoss()
@@ -233,8 +245,10 @@ class ModelTrainer:
             features, targets = batch
             features = features.to(self.device)
             target_tensors = {k: v.to(self.device) for k, v in targets.items()}
-            if self.use_amp:
-                autocast_cm = torch.amp.autocast(device_type="cuda")
+            if self._amp_backend == "torch.amp":
+                autocast_cm = torch.amp.autocast("cuda")
+            elif self._amp_backend == "torch.cuda.amp":
+                autocast_cm = torch.cuda.amp.autocast()
             else:
                 autocast_cm = nullcontext()
             with autocast_cm:
