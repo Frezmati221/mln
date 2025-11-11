@@ -73,6 +73,7 @@ class IntradayLabeler:
                 sl_grid=sl_grid,
                 timeframe_minutes=self.cfg.timeframe_minutes,
                 direction="long",
+                min_ratio=min_ratio,
             )
             short_reward, short_tp, short_sl, short_hold = self._evaluate_direction(
                 entry_price=closes[idx],
@@ -84,6 +85,7 @@ class IntradayLabeler:
                 sl_grid=sl_grid,
                 timeframe_minutes=self.cfg.timeframe_minutes,
                 direction="short",
+                min_ratio=min_ratio,
             )
 
             direction = 0
@@ -152,6 +154,7 @@ class IntradayLabeler:
         sl_grid: list[float],
         timeframe_minutes: int,
         direction: str,
+        min_ratio: float,
     ) -> Tuple[float, float, float, float]:
         best_reward = -np.inf
         best_tp = 0.0
@@ -160,6 +163,10 @@ class IntradayLabeler:
 
         for tp in tp_grid:
             for sl in sl_grid:
+                if sl <= 0:
+                    continue
+                if (tp / (sl + 1e-9)) < min_ratio:
+                    continue
                 reward, hold_minutes = self._simulate_path(
                     entry_price=entry_price,
                     highs=highs,
